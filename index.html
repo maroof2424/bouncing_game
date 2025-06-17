@@ -20,57 +20,64 @@
             border: 2px solid #333;
             background-color: #fff;
             width: 90%;
-            max-width: 600px;
+            max-width: 400px;
             height: 80vh;
-            max-height: 600px;
+            max-height: 500px;
             touch-action: none;
         }
         #score {
-            font-size: 20px;
-            margin-bottom: 10px;
+            font-size: 18px;
+            margin-bottom: 8px;
         }
         #instructions {
-            font-size: 14px;
+            font-size: 12px;
             text-align: center;
-            margin-bottom: 10px;
-            max-width: 600px;
+            margin-bottom: 8px;
+            max-width: 400px;
         }
     </style>
 </head>
 <body>
     <div id="score">Score: 0</div>
-    <div id="instructions">PC: Use Arrow Keys or WASD to move. Mobile: Tap and drag to move.</div>
+    <div id="instructions">PC: Arrow Keys or WASD. Mobile: Tap and drag.</div>
     <canvas id="gameCanvas"></canvas>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const scoreDisplay = document.getElementById('score');
 
-        // Set canvas size
-        canvas.width = Math.min(window.innerWidth * 0.9, 600);
-        canvas.height = Math.min(window.innerHeight * 0.8, 600);
+        // Set canvas size for mobile performance
+        canvas.width = Math.min(window.innerWidth * 0.9, 400);
+        canvas.height = Math.min(window.innerHeight * 0.8, 500);
 
-        // Player marble
+        // Player marble (now with constant bouncing)
         let player = {
             x: canvas.width / 2,
             y: canvas.height / 2,
-            radius: 15,
-            dx: 0,
-            dy: 0,
-            speed: 0.2,
-            maxSpeed: 5,
+            radius: 12,
+            dx: 0.5, // Initial velocity for bouncing effect
+            dy: 0.5,
+            speed: 0.3, // Fast drag response
+            maxSpeed: 6, // Higher top speed
             mass: 1
         };
 
-        // Target marbles
-        let targets = [
-            { x: Math.random() * (canvas.width - 20) + 10, y: Math.random() * (canvas.height - 20) + 10, radius: 10, dx: 1, dy: 1, mass: 0.5 },
-            { x: Math.random() * (canvas.width - 20) + 10, y: Math.random() * (canvas.height - 20) + 10, radius: 10, dx: -1, dy: -1, mass: 0.5 }
-        ];
+        // Single target marble
+        let target = {
+            x: Math.random() * (canvas.width - 20) + 10,
+            y: Math.random() * (canvas.height - 20) + 10,
+            radius: 8,
+            dx: 0.5,
+            dy: 0.5,
+            mass: 0.5
+        };
 
         let score = 0;
         let touchPos = null;
         let keys = {};
+        let lastUpdate = performance.now();
+        const targetFPS = 60;
+        const frameTime = 1000 / targetFPS;
 
         // Keyboard controls (PC)
         document.addEventListener('keydown', (e) => {
@@ -96,9 +103,10 @@
             touchPos = null;
         });
 
-        function updatePlayer() {
-            // Keyboard input
+        function updatePlayer(deltaTime) {
             let accX = 0, accY = 0;
+
+            // Keyboard input
             if (keys['ArrowUp'] || keys['w'] || keys['W']) accY -= player.speed;
             if (keys['ArrowDown'] || keys['s'] || keys['S']) accY += player.speed;
             if (keys['ArrowLeft'] || keys['a'] || keys['A']) accX -= player.speed;
@@ -116,8 +124,8 @@
             }
 
             // Apply acceleration
-            player.dx += accX;
-            player.dy += accY;
+            player.dx += accX * deltaTime * 60 / 1000;
+            player.dy += accY * deltaTime * 60 / 1000;
 
             // Limit speed
             let speed = Math.sqrt(player.dx * player.dx + player.dy * player.dy);
@@ -126,21 +134,17 @@
                 player.dy = (player.dy / speed) * player.maxSpeed;
             }
 
-            // Apply friction
-            player.dx *= 0.98;
-            player.dy *= 0.98;
-
-            // Update position
-            let newX = player.x + player.dx;
-            let newY = player.y + player.dy;
+            // No friction; player keeps moving
+            let newX = player.x + player.dx * deltaTime * 60 / 1000;
+            let newY = player.y + player.dy * deltaTime * 60 / 1000;
 
             // Boundary collision
             if (newX - player.radius < 0 || newX + player.radius > canvas.width) {
-                player.dx = -player.dx * 0.8;
+                player.dx = -player.dx * 0.7;
                 newX = Math.max(player.radius, Math.min(canvas.width - player.radius, newX));
             }
             if (newY - player.radius < 0 || newY + player.radius > canvas.height) {
-                player.dy = -player.dy * 0.8;
+                player.dy = -player.dy * 0.7;
                 newY = Math.max(player.radius, Math.min(canvas.height - player.radius, newY));
             }
 
@@ -148,64 +152,47 @@
             player.y = newY;
         }
 
-        function updateTargets() {
-            for (let target of targets) {
-                let newX = target.x + target.dx;
-                let newY = target.y + target.dy;
+        function updateTarget(deltaTime) {
+            let newX = target.x + target.dx * deltaTime * 60 / 1000;
+            let newY = target.y + target.dy * deltaTime * 60 / 1000;
 
-                // Boundary collision
-                if (newX - target.radius < 0 || newX + target.radius > canvas.width) {
-                    target.dx = -target.dx * 0.8;
-                    newX = Math.max(target.radius, Math.min(canvas.width - target.radius, newX));
-                }
-                if (newY - target.radius < 0 || newY + target.radius > canvas.height) {
-                    target.dy = -target.dy * 0.8;
-                    newY = Math.max(target.radius, Math.min(canvas.height - target.radius, newY));
-                }
-
-                target.x = newX;
-                target.y = newY;
+            // Boundary collision
+            if (newX - target.radius < 0 || newX + target.radius > canvas.width) {
+                target.dx = -target.dx * 0.7;
+                newX = Math.max(target.radius, Math.min(canvas.width - target.radius, newX));
             }
+            if (newY - target.radius < 0 || newY + target.radius > canvas.height) {
+                target.dy = -target.dy * 0.7;
+                newY = Math.max(target.radius, Math.min(canvas.height - target.radius, newY));
+            }
+
+            target.x = newX;
+            target.y = newY;
         }
 
-        function handleCollisions() {
-            for (let target of targets) {
-                let dx = player.x - target.x;
-                let dy = player.y - target.y;
-                let distance = Math.sqrt(dx * dx + dy * dy);
+        function handleCollision() {
+            let dx = player.x - target.x;
+            let dy = player.y - target.y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
 
-                if (distance < player.radius + target.radius) {
-                    // Elastic collision
-                    let angle = Math.atan2(dy, dx);
-                    let sin = Math.sin(angle);
-                    let cos = Math.cos(angle);
+            if (distance < player.radius + target.radius) {
+                // Simplified collision (swap velocities with damping)
+                let tempDx = player.dx;
+                let tempDy = player.dy;
+                player.dx = target.dx * 0.7;
+                player.dy = target.dy * 0.7;
+                target.dx = tempDx * 0.7;
+                target.dy = tempDy * 0.7;
 
-                    // Rotate velocities
-                    let vx1 = player.dx * cos + player.dy * sin;
-                    let vy1 = player.dy * cos - player.dx * sin;
-                    let vx2 = target.dx * cos + target.dy * sin;
-                    let vy2 = target.dy * cos - target.dx * sin;
+                // Prevent sticking
+                let overlap = player.radius + target.radius - distance;
+                player.x += (dx / distance) * overlap * 0.5;
+                player.y += (dy / distance) * overlap * 0.5;
+                target.x -= (dx / distance) * overlap * 0.5;
+                target.y -= (dy / distance) * overlap * 0.5;
 
-                    // Apply collision formula
-                    let finalVx1 = ((player.mass - target.mass) * vx1 + 2 * target.mass * vx2) / (player.mass + target.mass);
-                    let finalVx2 = ((target.mass - player.mass) * vx2 + 2 * player.mass * vx1) / (player.mass + target.mass);
-
-                    // Rotate back
-                    player.dx = finalVx1 * cos - vy1 * sin;
-                    player.dy = vy1 * cos + finalVx1 * sin;
-                    target.dx = finalVx2 * cos - vy2 * sin;
-                    target.dy = vy2 * cos + finalVx2 * sin;
-
-                    // Prevent sticking
-                    let overlap = player.radius + target.radius - distance;
-                    player.x += (dx / distance) * overlap * 0.5;
-                    player.y += (dy / distance) * overlap * 0.5;
-                    target.x -= (dx / distance) * overlap * 0.5;
-                    target.y -= (dy / distance) * overlap * 0.5;
-
-                    score += 10;
-                    scoreDisplay.textContent = `Score: ${score}`;
-                }
+                score += 10;
+                scoreDisplay.textContent = `Score: ${score}`;
             }
         }
 
@@ -219,26 +206,28 @@
             ctx.fill();
             ctx.closePath();
 
-            // Draw targets
-            targets.forEach(target => {
-                ctx.beginPath();
-                ctx.arc(target.x, target.y, target.radius, 0, Math.PI * 2);
-                ctx.fillStyle = 'red';
-                ctx.fill();
-                ctx.closePath();
-            });
+            // Draw target
+            ctx.beginPath();
+            ctx.arc(target.x, target.y, target.radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'red';
+            ctx.fill();
+            ctx.closePath();
         }
 
-        function gameLoop() {
-            updatePlayer();
-            updateTargets();
-            handleCollisions();
-            draw();
+        function gameLoop(timestamp) {
+            let deltaTime = timestamp - lastUpdate;
+            if (deltaTime > frameTime) {
+                updatePlayer(deltaTime);
+                updateTarget(deltaTime);
+                handleCollision();
+                draw();
+                lastUpdate = timestamp - (deltaTime % frameTime);
+            }
             requestAnimationFrame(gameLoop);
         }
 
         // Start the game
-        gameLoop();
+        requestAnimationFrame(gameLoop);
     </script>
 </body>
 </html>
